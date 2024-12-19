@@ -12,7 +12,7 @@ char *read_disk_map(const char *filename, size_t *dm_length) {
     }
 
     size_t chunk_size = 1024;
-    size_t buffer_size = chunk_size;
+    size_t buffer_size = chunk_size * 2;
     *dm_length = 0;
 
     char *buffer = (char *) malloc (buffer_size);
