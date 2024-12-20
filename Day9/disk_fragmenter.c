@@ -12,7 +12,7 @@ char *read_disk_map(const char *filename, size_t *dm_length) {
     }
 
     size_t chunk_size = 1024;
-    size_t buffer_size = chunk_size * 2;
+    size_t buffer_size = chunk_size;
     *dm_length = 0;
 
     char *buffer = (char *) malloc (buffer_size);
@@ -25,7 +25,7 @@ char *read_disk_map(const char *filename, size_t *dm_length) {
     size_t bytes_read;
     while ((bytes_read = fread(buffer + *dm_length, 1, chunk_size, file)) > 0) {
         *dm_length += bytes_read;
-        if (*dm_length + chunk_size >= buffer_size) {
+        if (*dm_length >= buffer_size) {
             buffer_size *= 2;
             char *new_buffer = (char *) realloc (buffer, buffer_size);
             if (!new_buffer) {
