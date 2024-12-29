@@ -69,9 +69,9 @@ int *convert_to_digits(const char *disk_map, size_t dm_length, size_t *count) {
 
     *count = 0;
     for (size_t i = 0; i < dm_length; i++) {
-        char c = disk_map[i];
+        char c[] = {disk_map[i], '\0'};
         int digit;
-        sscanf(&c, "%d", &digit);
+        sscanf(c, "%d", &digit);
         dm_in_digits[i] = digit;
         *count += digit;
     }
