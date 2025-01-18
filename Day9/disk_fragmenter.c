@@ -54,7 +54,7 @@ char *read_disk_map(const char *filename, size_t *dm_length) {
     }
 
 #ifdef DEBUG
-    printf("%zu\n", *dm_length);
+    printf("Disk map length: %zu\n", *dm_length);
 #endif
 
     return buffer;
@@ -77,17 +77,18 @@ int *convert_to_digits(const char *disk_map, size_t dm_length, size_t *count) {
     }
 
 #ifdef DEBUG
+    printf("Diskmap in digits: ");
     for (int i = 0; i < dm_length; i++) {
         printf("%d", dm_in_digits[i]);
     }
     printf("\n");
-    printf("%zu\n", *count);
+    printf("Diskmap in blocks length: %zu\n", *count);
 #endif
 
     return dm_in_digits; 
 }
 
-int *file_compact(int *dm_in_digits, size_t dm_length, size_t count) {
+int *convert_to_blocks(int *dm_in_digits, size_t dm_length, size_t count) {
     int *individual_blocks = (int *) malloc (count * sizeof(int));
     if (!individual_blocks) {
         perror("Error allocating memory");
@@ -117,12 +118,36 @@ int *file_compact(int *dm_in_digits, size_t dm_length, size_t count) {
     }
 
 #ifdef DEBUG
+    printf("Individual blocks:\n");
     for (size_t i = 0; i < count; i++) {
         printf("%d", individual_blocks[i]);
     }
     printf("\n");
 #endif
 
+    return individual_blocks;
+}
+
+int *make_copy(int *individual_blocks, size_t count) {
+    int *duplicate = (int *) malloc (count * sizeof(int));
+    if (!duplicate) {
+        perror("Error allocating memory");
+        return NULL;
+    }
+    memcpy(duplicate, individual_blocks, count * sizeof(int));
+
+#ifdef DEBUG
+    printf("Copy of individual blocks:\n");
+    for (size_t i = 0; i < count; i++) {
+        printf("%d", duplicate[i]);
+    }
+    printf("\n");
+#endif
+
+    return duplicate;
+}
+
+int *compact_files_1(int *individual_blocks, size_t count) {
     long int first = 0;
     long int last = count - 1;
 
@@ -142,8 +167,64 @@ int *file_compact(int *dm_in_digits, size_t dm_length, size_t count) {
     }
 
 #ifdef DEBUG
-    printf("%ld %ld\n", first, last);
+    printf("First: %ld  Last: %ld\n", first, last);
+    printf("Compacted_1:\n");
+    for (size_t i = 0; i < count; i++) {
+        printf("%d", individual_blocks[i]);
+    }
+    printf("\n");
+#endif
 
+    return individual_blocks;
+}
+
+int *compact_files_2(int *individual_blocks, size_t count) {
+    long int first = 0;
+    long int last = count - 1;
+    long int first_free = 0;
+    size_t free_blocks = 0;
+    while (last > 0) {
+        size_t blocks_to_swap = 0;
+        size_t block_id = individual_blocks[last];
+        while (last > 0 && block_id == individual_blocks[last] && 
+               individual_blocks[last] != FREE_SPACE_BLOCK) {
+            last--;
+            blocks_to_swap++;
+        }
+        first = 0;
+        first_free = 0;
+        while (first <= last) {
+            free_blocks = 0;
+            while (first <= last && individual_blocks[first] != FREE_SPACE_BLOCK) {
+                first++;
+                first_free++;
+            }
+            while (first <= last && individual_blocks[first] == FREE_SPACE_BLOCK) {
+                first++;
+                free_blocks++;
+            }
+            if (free_blocks >= blocks_to_swap) {
+                for (int count = 1; count <= blocks_to_swap; count++) {
+                    individual_blocks[first_free] = individual_blocks[last + count];
+                    individual_blocks[last + count] = FREE_SPACE_BLOCK;
+                    first_free++;
+                }
+                if (first == last) {
+                    last -= blocks_to_swap;
+                }
+                break;
+            } else {
+                first_free = first;
+            }
+        }
+        while (last > 0 && individual_blocks[last] == FREE_SPACE_BLOCK) {
+            last--;
+        }
+    }
+
+#ifdef DEBUG
+    printf("First: %ld  Last: %ld\n", first, last);
+    printf("Compacted_2:\n");
     for (size_t i = 0; i < count; i++) {
         printf("%d", individual_blocks[i]);
     }
@@ -156,14 +237,15 @@ int *file_compact(int *dm_in_digits, size_t dm_length, size_t count) {
 unsigned long long compute_checksum(int *individual_blocks, size_t count) {
     unsigned long long checksum = 0;
     size_t i;
-    
-    for (i = 0; i < count && individual_blocks[i] != FREE_SPACE_BLOCK; i++) {
-        checksum += (unsigned long long)i * individual_blocks[i];
+    for (i = 0; i < count; i++) {
+        checksum += 
+            individual_blocks[i] != FREE_SPACE_BLOCK ?
+            (unsigned long long)i * individual_blocks[i] :
+            0;
     }
 
 #ifdef DEBUG
-    printf("%zu %d %d\n", i, individual_blocks[i - 1], individual_blocks[i]);
-    printf("%llu\n", checksum);
+    printf("Checksum: %llu\n", checksum);
 #endif
 
     return checksum;
@@ -189,18 +271,30 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;        
     }
 
-    int *individual_blocks = file_compact(dm_in_digits, dm_length, count);
+    int *individual_blocks_1 = convert_to_blocks(dm_in_digits, dm_length, count);
 
-    if (!individual_blocks) {
+    if (!individual_blocks_1) {
         return EXIT_FAILURE;
     }
 
-    unsigned long long checksum = compute_checksum(individual_blocks, count);
-    printf("%llu\n", checksum);
+    int *individual_blocks_2 = make_copy(individual_blocks_1, count);
+
+    if (!individual_blocks_2) {
+        return EXIT_FAILURE;
+    }
+
+    int *compacted_1 = compact_files_1(individual_blocks_1, count);
+    unsigned long long checksum_1 = compute_checksum(compacted_1, count);
+    printf("Checksum_1: %llu\n", checksum_1);
+
+    int *compacted_2 = compact_files_2(individual_blocks_2, count);
+    unsigned long long checksum_2 = compute_checksum(compacted_2, count);
+    printf("Checksum_2: %llu\n", checksum_2);    
 
     free(disk_map);
     free(dm_in_digits);
-    free(individual_blocks);
+    free(individual_blocks_1);
+    free(individual_blocks_2);
 
     return EXIT_SUCCESS;
 }
